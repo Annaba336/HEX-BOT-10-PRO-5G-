@@ -1,254 +1,176 @@
-<!DOCTYPE html>
-<html lang="ar">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>HEX BOT 10 PRO 5G</title>
-  <style>
-    /* RESET بسيط */
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      font-family: sans-serif;
-    }
+const express = require("express");
+const fs = require("fs");
+const session = require("express-session");
 
-    body {
-      min-height: 100vh;
-      background: linear-gradient(90deg, #ff0000, #00ffd0);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
+const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(session({ secret: "adminSecret", resave: false, saveUninitialized: true }));
 
-    /* حاوية الصفحة بالكامل */
-    .container {
-      width: 100%;
-      max-width: 400px;
-      background-color: #222;
-      border-radius: 10px;
-      padding: 20px;
-      color: #fff;
-      text-align: center;
-    }
+// الأكواد المخزنة
+let codes = [
+    "HEX-1A2B3C", "HEX-4D5E6F", "HEX-7G8H9I", "HEX-J1K2L3",
+    "HEX-M4N5O6", "HEX-P7Q8R9", "HEX-ABC123", "HEX-DEF456",
+    "HEX-789XYZ", "HEX-654MNO", "HEX-X1Y2Z3", "HEX-9B8C7D"
+];
 
-    /* عنوان الموقع */
-    .container h1 {
-      margin-bottom: 20px;
-      color: #fff;
-    }
+let attempts = {}; // لتتبع محاولات كل IP
 
-    /* قسم تسجيل الدخول */
-    #login-section input {
-      width: 80%;
-      padding: 10px;
-      margin-bottom: 15px;
-      border: none;
-      border-radius: 5px;
-      outline: none;
-      text-align: center;
-    }
+// الصفحة الرئيسية (التحقق من الأكواد)
+app.get("/", (req, res) => {
+    res.send(`
+        <html>
+        <head>
+            <title>التحقق من الكود</title>
+            <style>
+                body { text-align: center; font-family: Arial; background: #f4f4f4; }
+                .container { margin: 100px auto; padding: 20px; width: 300px; background: white; border-radius: 10px; }
+                input, button { width: 100%; margin: 5px 0; padding: 10px; }
+                button { background: blue; color: white; border: none; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>أدخل الكود للتحقق</h2>
+                <input type="text" id="codeInput" placeholder="أدخل الكود">
+                <button onclick="checkCode()">تحقق</button>
+                <p id="result"></p>
+            </div>
+            <script>
+                async function checkCode() {
+                    const code = document.getElementById("codeInput").value;
+                    const response = await fetch("/verify?code=" + code);
+                    const result = await response.text();
+                    document.getElementById("result").innerText = result;
+                }
+            </script>
+        </body>
+        </html>
+    `);
+});
 
-    #login-section button {
-      padding: 10px 20px;
-      border: none;
-      border-radius: 5px;
-      background-color: #e60000;
-      color: #fff;
-      cursor: pointer;
-    }
+// التحقق من الأكواد
+app.get("/verify", (req, res) => {
+    const ip = req.ip;
+    const code = req.query.code;
 
-    #login-section button:hover {
-      background-color: #c00000;
-    }
+    if (!attempts[ip]) attempts[ip] = 0;
+    if (attempts[ip] >= 5) return res.send("❌ تم حظرك بسبب المحاولات الخاطئة المتكررة!");
 
-    /* قسم لوحة التحكم */
-    #dashboard-section {
-      display: none; /* مخفي افتراضياً إلى أن يتم التحقق من الكود */
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-top: 20px;
-    }
-
-    .grid-item {
-      background-color: #333;
-      border-radius: 5px;
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      align-items: center;
-      min-height: 80px;
-    }
-
-    .grid-item span {
-      margin-bottom: 10px;
-    }
-
-    .grid-item button {
-      border: none;
-      border-radius: 5px;
-      padding: 6px 10px;
-      cursor: pointer;
-      background-color: #009900;
-      color: #fff;
-    }
-
-    .grid-item button:hover {
-      background-color: #007700;
-    }
-
-    /* رسائل الخطأ */
-    .error {
-      color: #ff5555;
-      margin-bottom: 15px;
-    }
-  </style>
-</head>
-<body>
-
-<div class="container">
-  <!-- عنوان الموقع -->
-  <h1>HEX BOT 10 PRO 5G</h1>
-
-  <!-- قسم تسجيل الدخول -->
-  <div id="login-section">
-    <p>أدخل كود التفعيل:</p>
-    <input type="text" id="activationCode" placeholder="مثال: HEX-1A2B3C" />
-    <div id="errorMessage" class="error"></div>
-    <button onclick="checkCode()">دخول</button>
-  </div>
-
-  <!-- قسم لوحة التحكم بعد تسجيل الدخول -->
-  <div id="dashboard-section">
-    <h2>لوحة التحكم</h2>
-    <div class="grid">
-      <div class="grid-item">
-        <span>رياكشن النور</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>مشروع تخمين النور</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>دردشة فقر لعب</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>معلومات لعب</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>حماية لفك حظر</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>تحديث السريبات</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>مطور تعليم النور</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>تلقف النشر سبام</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>مطور تعليم البو</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>نشر استيكرات ضحك</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>إرسال رسالة لعب</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>إنشاء حساب لعب</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>بوت ربط الصفحة بلعب</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>الحصول على حساب</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>تفعيل بوت فيسبوك</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>البث في 5 ثواني</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>غلق باب الثغرات</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>مشاركة مع صفحة ثانية</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>تسجيل خروج من الحساب</span>
-        <button>تشغيل</button>
-      </div>
-      <div class="grid-item">
-        <span>حذف البوت من التلي</span>
-        <button>تشغيل</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-  // قائمة الأكواد الصحيحة
-  const validCodes = [
-    "HEX-1A2B3C",
-    "HEX-4D5E6F",
-    "HEX-7G8H9I",
-    "HEX-J1K2L3",
-    "HEX-M4N5O6",
-    "HEX-P7Q8R9",
-    "HEX-ABC123",
-    "HEX-DEF456",
-    "HEX-789XYZ",
-    "HEX-654MNO",
-    "HEX-X1Y2Z3",
-    "HEX-9B8C7D",
-    "HEX-3F2E1D",
-    "HEX-6H5G4F",
-    "HEX-J9K8L7",
-    "HEX-M3N2O1",
-    "HEX-Q4R5S6",
-    "HEX-T7U8V9",
-    "HEX-WX1Y2Z",
-    "HEX-987ABC"
-  ];
-
-  function checkCode() {
-    const inputCode = document.getElementById("activationCode").value.trim();
-    const errorMessage = document.getElementById("errorMessage");
-    if (validCodes.includes(inputCode)) {
-      // إخفاء قسم تسجيل الدخول وإظهار لوحة التحكم
-      document.getElementById("login-section").style.display = "none";
-      document.getElementById("dashboard-section").style.display = "block";
+    if (codes.includes(code)) {
+        res.send("✅ الكود صحيح!");
     } else {
-      // رسالة خطأ إذا كان الكود غير صحيح
-      errorMessage.textContent = "الكود غير صحيح! حاول مرة أخرى.";
+        attempts[ip]++;
+        fs.appendFileSync("logs.txt", `محاولة فاشلة: ${code} من IP: ${ip}\n`);
+        res.send("❌ الكود غير صحيح!");
     }
-  }
-</script>
+});
 
-</body>
-</html>
+// صفحة تسجيل الدخول للإدارة
+app.get("/admin", (req, res) => {
+    res.send(`
+        <html>
+        <head>
+            <title>لوحة التحكم</title>
+            <style>
+                body { text-align: center; font-family: Arial; background: #222; color: white; }
+                .container { margin: 100px auto; padding: 20px; width: 300px; background: #333; border-radius: 10px; }
+                input, button { width: 100%; margin: 5px 0; padding: 10px; }
+                button { background: green; color: white; border: none; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>تسجيل الدخول</h2>
+                <form action="/login" method="POST">
+                    <input type="text" name="username" placeholder="اسم المستخدم">
+                    <input type="password" name="password" placeholder="كلمة المرور">
+                    <button type="submit">تسجيل الدخول</button>
+                </form>
+            </div>
+        </body>
+        </html>
+    `);
+});
+
+// تسجيل الدخول
+app.post("/login", (req, res) => {
+    if (req.body.username === "admin" && req.body.password === "1234") {
+        req.session.admin = true;
+        res.redirect("/dashboard");
+    } else {
+        res.send("❌ بيانات خاطئة!");
+    }
+});
+
+// لوحة التحكم للإدارة
+app.get("/dashboard", (req, res) => {
+    if (!req.session.admin) return res.send("❌ غير مصرح لك!");
+    
+    res.send(`
+        <html>
+        <head>
+            <title>لوحة التحكم</title>
+            <style>
+                body { text-align: center; font-family: Arial; background: #222; color: white; }
+                .container { margin: 100px auto; padding: 20px; width: 400px; background: #333; border-radius: 10px; }
+                input, button { width: 100%; margin: 5px 0; padding: 10px; }
+                button { background: orange; color: white; border: none; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>إدارة الأكواد</h2>
+                <input type="text" id="newCode" placeholder="أدخل كود جديد">
+                <button onclick="addCode()">إضافة كود</button>
+                <button onclick="deleteCode()">حذف كود</button>
+                <p id="status"></p>
+            </div>
+            <script>
+                async function addCode() {
+                    const newCode = document.getElementById("newCode").value;
+                    const response = await fetch("/add-code", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ code: newCode })
+                    });
+                    document.getElementById("status").innerText = await response.text();
+                }
+                async function deleteCode() {
+                    const delCode = document.getElementById("newCode").value;
+                    const response = await fetch("/delete-code", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ code: delCode })
+                    });
+                    document.getElementById("status").innerText = await response.text();
+                }
+            </script>
+        </body>
+        </html>
+    `);
+});
+
+// إضافة كود جديد
+app.post("/add-code", (req, res) => {
+    if (!req.session.admin) return res.send("❌ غير مصرح لك!");
+
+    const newCode = req.body.code;
+    if (!codes.includes(newCode)) {
+        codes.push(newCode);
+        res.send("✅ تم إضافة الكود!");
+    } else {
+        res.send("⚠️ الكود موجود مسبقًا!");
+    }
+});
+
+// حذف كود
+app.post("/delete-code", (req, res) => {
+    if (!req.session.admin) return res.send("❌ غير مصرح لك!");
+
+    codes = codes.filter(c => c !== req.body.code);
+    res.send("✅ تم حذف الكود!");
+});
+
+// تشغيل السيرفر
+app.listen(3000, () => console.log("🚀 السيرفر يعمل على المنفذ 3000"));
